@@ -144,6 +144,8 @@ class VivadoWriter(Writer):
                 newline = ''
                 newline += indent + inputs_str + ',\n'
                 newline += indent + outputs_str
+                if model.config.is_Bayes():
+                    newline += ',\n' + indent + 'int mask_index'
                 if len(model_brams) > 0:
                     newline += ',\n' + brams_str
                 newline += '\n'
@@ -229,6 +231,8 @@ class VivadoWriter(Writer):
                     )
                     if all_brams:
                         newline += indent + '#pragma HLS INTERFACE bram port={} \n'.format(','.join(all_brams))
+                    if model.config.is_Bayes():
+                        newline += indent + '#pragma HLS INTERFACE ap_stable port=mask_index \n'
                     newline += pipeline_pragma
 
             elif '// hls-fpga-machine-learning insert layers' in line:
@@ -302,6 +306,8 @@ class VivadoWriter(Writer):
                 newline = ''
                 newline += indent + inputs_str + ',\n'
                 newline += indent + outputs_str
+                if model.config.is_Bayes():
+                    newline += ',\n' + indent + 'int mask_index'
                 if len(model_brams) > 0:
                     newline += ',\n' + brams_str
                 newline += '\n'
@@ -549,10 +555,11 @@ class VivadoWriter(Writer):
 
                 input_vars = ','.join([i.name for i in model_inputs])
                 output_vars = ','.join([o.name for o in model_outputs])
+                n_mask_var = '0' if model.config.is_Bayes() else None
                 bram_vars = ','.join([b.name for b in model_brams])
 
                 # Concatenate the input, output, and bram variables. Filter out empty/null values
-                all_vars = ','.join(filter(None, [input_vars, output_vars, bram_vars]))
+                all_vars = ','.join(filter(None, [input_vars, output_vars, n_mask_var, bram_vars]))
 
                 top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
 
@@ -632,7 +639,10 @@ class VivadoWriter(Writer):
 
                 newline = ''
                 newline += indent + inputs_str + ',\n'
-                newline += indent + outputs_str + '\n'
+                newline += indent + outputs_str
+                if model.config.is_Bayes():
+                    newline += ',\n' + indent + 'int mask_index'
+                newline += '\n'
 
             elif '// hls-fpga-machine-learning insert wrapper' in line:
                 dtype = line.split('#', 1)[1].strip()
@@ -650,11 +660,12 @@ class VivadoWriter(Writer):
                 newline += '\n'
 
                 input_vars = ','.join([i.name + '_ap' for i in model_inputs])
+                n_mask_var = 'mask_index' if model.config.is_Bayes() else None
                 bram_vars = ','.join([b.name for b in model_brams])
                 output_vars = ','.join([o.name + '_ap' for o in model_outputs])
 
                 # Concatenate the input, output, and bram variables. Filter out empty/null values
-                all_vars = ','.join(filter(None, [input_vars, output_vars, bram_vars]))
+                all_vars = ','.join(filter(None, [input_vars, output_vars, n_mask_var, bram_vars]))
 
                 top_level = indent + f'{model.config.get_project_name()}({all_vars});\n'
                 newline += top_level

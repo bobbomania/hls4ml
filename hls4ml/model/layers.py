@@ -1621,6 +1621,46 @@ class SymbolicExpression(Layer):
         self.add_output_variable([len(self.get_attr('expression'))], [f'N_OUTPUTS_{self.index}'], var_name='y')
 
 
+class BayesianDropout(Layer):
+    _expected_attributes = [
+        Attribute('n_in'),
+        Attribute('drop_rate', value_type=float, default=0.0),
+        Attribute('seed', value_type=int, default=0)
+    ]
+
+    def initialize(self):
+        inp = self.get_input_variable()
+        shape = inp.shape
+        dims = inp.dim_names
+        self.add_output_variable(shape, dims)
+        self.set_attr('n_in', self.get_input_variable().size())
+        self.set_attr('drop_rate', self.get_attr('drop_rate'))
+        self.set_attr('seed', self.get_attr('seed'))
+
+
+class Masksembles(Layer):
+    _expected_attributes = [
+        Attribute('n_in'),
+        Attribute('num_masks', value_type=int, default=4),
+        Attribute('scale', value_type=float, default=1.),
+        Attribute('n_filt', default=1),
+
+        WeightAttribute('weight'),
+        TypeAttribute('weight'),
+    ]
+
+    def initialize(self):
+        inp = self.get_input_variable()
+        shape = inp.shape
+        dims = inp.dim_names
+        self.add_output_variable(shape, dims)
+        self.add_weights(quantizer=self.get_attr('weight_quantizer'))
+        self.set_attr('n_in', self.get_input_variable().size())
+        self.set_attr('num_masks', self.get_attr('num_masks'))
+        self.set_attr('scale', self.get_attr('scale'))
+        self.set_attr('n_filt', self.get_attr('n_filt'))
+
+
 layer_map = {
     'Input': Input,
     'InputLayer': Input,
@@ -1689,6 +1729,9 @@ layer_map = {
     'SymbolicExpression': SymbolicExpression,
     # TensorFlow-specific layers:
     'BiasAdd': BiasAdd,
+    # Bayesian layers
+    'BayesianDropout': BayesianDropout,
+    'Masksembles': Masksembles,
 }
 
 

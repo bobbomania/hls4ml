@@ -67,6 +67,9 @@ class HLSConfig:
     def get_config_value(self, key, default=None):
         return self.config.get(key, default)
 
+    def is_Bayes(self):
+        return self.get_config_value('Bayes', default=False)
+
     def get_project_name(self):
         return self.get_config_value('ProjectName')
 
@@ -766,30 +769,41 @@ class ModelGraph:
 
         return int(n_sample)
 
-    def predict(self, x):
+    def predict_MC(self, x, nSamples):
+        outputs = [self.predict(x) for _ in range(nSamples)]
+        return sum(outputs) / len(outputs)
+
+    def predict(self, x, mask_index=0):
         top_function, ctype = self._get_top_function(x)
         n_samples = self._compute_n_samples(x)
         n_inputs = len(self.get_input_variables())
         n_outputs = len(self.get_output_variables())
 
+        curr_dir = os.getcwd()
+        os.chdir(self.config.get_output_dir() + '/firmware')
+
         output = []
         if n_samples == 1 and n_inputs == 1:
             x = [x]
 
-        for i in range(n_samples):
-            predictions = [np.zeros(yj.size(), dtype=ctype) for yj in self.get_output_variables()]
-            if n_inputs == 1:
-                inp = [np.asarray(x[i])]
-            else:
-                inp = [np.asarray(xj[i]) for xj in x]
-            argtuple = inp
-            argtuple += predictions
-            argtuple = tuple(argtuple)
-            top_function(*argtuple)
-            output.append(predictions)
+        try:
+            for i in range(n_samples):
+                predictions = [np.zeros(yj.size(), dtype=ctype) for yj in self.get_output_variables()]
+                if n_inputs == 1:
+                    inp = [np.asarray(x[i])]
+                else:
+                    inp = [np.asarray(xj[i]) for xj in x]
+                argtuple = inp
+                argtuple += predictions
+                argtuple += [mask_index]
+                argtuple = tuple(argtuple)
+                top_function(*argtuple)
+                output.append(predictions)
 
-        # Convert to list of numpy arrays (one for each output)
-        output = [np.asarray([output[i_sample][i_output] for i_sample in range(n_samples)]) for i_output in range(n_outputs)]
+            # Convert to list of numpy arrays (one for each output)
+            output = [np.asarray([output[i_sample][i_output] for i_sample in range(n_samples)]) for i_output in range(n_outputs)]
+        finally:
+            os.chdir(curr_dir)
 
         if n_samples == 1 and n_outputs == 1:
             return output[0][0]
