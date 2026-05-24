@@ -22,6 +22,7 @@
 
 #include <cmath>
 #include "ap_fixed.h"
+#include "ap_int.h"
 #include "hls_stream.h"
 #include "nnet_common.h"
 #include "nnet_types.h"
@@ -31,7 +32,7 @@
 namespace nnet {
 
 // *************************************************
-//       Bayesian Dropout
+//       Bayesian Dropout (streaming)
 // *************************************************
 template<class data_T, class res_T, typename CONFIG_T>
 void dropout(hls::stream<data_T> &data_stream, hls::stream<res_T> &res_stream) {
@@ -53,15 +54,18 @@ void dropout(hls::stream<data_T> &data_stream, hls::stream<res_T> &res_stream) {
         }
     }
 
-    static std::minstd_rand generator(0);
-    float keep_rate = 1 - CONFIG_T::drop_rate;
-    float max = generator.max();
+    static ap_uint<32> lfsr_state = 0xACE1u;
+
+    // Threshold for keeping: top 16 bits of LFSR compared against keep_rate * 65536
+    ap_fixed<24,14> keep_rate = 1 - CONFIG_T::drop_rate;
+    ap_uint<16> threshold = (ap_uint<16>)(keep_rate * 65536);
+
     DropoutLoop: for (int i = 0; i < CONFIG_T::n_in; i++) {
         #pragma HLS UNROLL
+        lfsr_state = lfsr_next(lfsr_state);
+        ap_uint<16> rand_val = lfsr_state(31, 16);
         typename data_T::value_type zero = {};
-        typename data_T::value_type temp =
-            ((float)generator() / max) < keep_rate
-                ? data[i] : zero;
+        typename data_T::value_type temp = (rand_val < threshold) ? data[i] : zero;
         res[i] = temp * (typename data_T::value_type)keep_rate;
     }
 

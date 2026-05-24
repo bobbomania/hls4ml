@@ -10,7 +10,6 @@ struct config{index} : nnet::dropout_config {{
     static const unsigned n_in = {n_in};
     static const unsigned io_type = nnet::{iotype};
     static constexpr float drop_rate = {drop_rate};
-    std::default_random_engine eng = std::default_random_engine();
 }};\n"""
 
 dropout_function_template = 'nnet::dropout<{input_t}, {output_t}, {config}>({input}, {output});'

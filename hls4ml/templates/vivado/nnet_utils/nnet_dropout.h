@@ -21,13 +21,20 @@
 #define NNET_DROPOUT_H_
 
 #include "ap_fixed.h"
+#include "ap_int.h"
 #include "nnet_common.h"
 #include <cmath>
-#include <random>
 #include <stdint.h>
 
 
 namespace nnet {
+
+// 32-bit Fibonacci LFSR (maximal-length polynomial x^32 + x^22 + x^2 + x + 1)
+inline ap_uint<32> lfsr_next(ap_uint<32> state) {
+    #pragma HLS INLINE
+    ap_uint<1> b = state[31] ^ state[21] ^ state[1] ^ state[0];
+    return (state << 1) | b;
+}
 
 struct dropout_config
 {
@@ -47,18 +54,23 @@ void dropout(data_T data[CONFIG_T::n_in], res_T res[CONFIG_T::n_in])
 {
     #pragma HLS PIPELINE
 
-  static std::default_random_engine generator(0);
-  data_T keep_rate = 1 - CONFIG_T::drop_rate;
-  data_T max = generator.max();
-  bool random_array[CONFIG_T::n_in];
+    static ap_uint<32> lfsr_state = 0xACE1u;
+
+    // Threshold for keeping: top 16 bits of LFSR compared against keep_rate * 65536
+    data_T keep_rate = 1 - CONFIG_T::drop_rate;
+    ap_uint<16> threshold = (ap_uint<16>)(keep_rate * 65536);
+
+    bool random_array[CONFIG_T::n_in];
     RandomNumberLoop: for (int i = 0; i < CONFIG_T::n_in; i++) {
-      random_array[i] = ((data_T)generator() / max) < keep_rate;
+        lfsr_state = lfsr_next(lfsr_state);
+        ap_uint<16> rand_val = lfsr_state(31, 16);
+        random_array[i] = (rand_val < threshold);
     }
-  for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
-    data_T zero = {};
-    data_T temp = random_array[ii] ? data[ii] : zero;
-    res[ii] = temp * keep_rate;
-  }
+    for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
+        data_T zero = {};
+        data_T temp = random_array[ii] ? data[ii] : zero;
+        res[ii] = temp * keep_rate;
+    }
 }
 }
 
